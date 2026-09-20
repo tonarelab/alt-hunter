@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#07111f">
-<title>ALT HUNTER v0.9</title>
+<title>ALT HUNTER v1.0</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#07111f;color:#eef5ff}
@@ -30,6 +30,15 @@ h1{margin:0;font-size:32px}
 .muted{color:#7890ad}
 .empty{text-align:center;color:#8298b2;padding:22px}
 .footer{margin-top:20px;color:#6f849e;font-size:11px;line-height:1.6}
+.miniChart{width:100%;height:72px;display:block;background:#091522;border-radius:10px;margin-top:10px}
+.allGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+.compactCard{background:#0c1828;border:1px solid #1f3045;border-radius:16px;padding:12px}
+.compactTop{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.compactPrice{font-size:16px;font-weight:750;margin-top:4px}
+.compactMove{font-size:12px;color:#9eb0c6}
+.sectionTitle{margin-top:20px;font-size:18px;font-weight:800}
+@media(max-width:620px){.allGrid{grid-template-columns:1fr}}
+
 @media(max-width:620px){.metrics{grid-template-columns:1fr 1fr}.metric:last-child{grid-column:1/-1}}
 </style>
 </head>
@@ -38,7 +47,7 @@ h1{margin:0;font-size:32px}
   <div class="top">
     <div>
       <h1>ALT HUNTER</h1>
-      <div class="sub">Binance市場で監視 → 日本で買えるアルトだけ表示 v0.9</div>
+      <div class="sub">Binance市場で監視 → 日本で買えるアルトだけ表示 v1.0</div>
       <div id="diag" class="sub">起動中…</div>
     </div>
     <div id="status" class="status">接続中…</div>
@@ -72,9 +81,13 @@ h1{margin:0;font-size:32px}
     <div id="watch" class="grid"></div>
   </div>
 
+  <div class="sectionTitle">全銘柄ミニチャート</div>
+  <div class="sub">直近10分・常時更新</div>
+  <div id="allCharts" class="allGrid"></div>
+
   <div class="footer">
     この版は売買推奨ではなく、チャートを開く候補を探すレーダーです。<br>
-    Binance市場のUSDTペアを監視し、日本で買える対象だけ表示します。上昇時は高値まで、下落時は安値までの距離を表示します。
+    Binance市場のUSDTペアを監視し、日本で買える対象だけ表示します。上昇時は高値まで、下落時は安値までの距離を表示し、全銘柄の直近10分ミニチャートを常時表示します。
   </div>
 </div>
 
@@ -204,6 +217,79 @@ h1{margin:0;font-size:32px}
       .slice(0,6);
     $("watch").innerHTML = watch.length ? watch.map(card).join("") :
       `<div class="empty">データ受信待ち…</div>`;
+    renderAllCharts();
+  }
+
+
+  function drawMiniChart(canvas, coin){
+    const s = state[coin];
+    if(!canvas || !s || !s.trades.length) return;
+
+    const now = Date.now();
+    const pts = s.trades.filter(x => x.t >= now-10*60_000);
+    const ctx = canvas.getContext("2d");
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const cssW = canvas.clientWidth || 320;
+    const cssH = canvas.clientHeight || 72;
+    const w = Math.floor(cssW*dpr), h = Math.floor(cssH*dpr);
+
+    if(canvas.width !== w || canvas.height !== h){
+      canvas.width=w; canvas.height=h;
+    }
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,cssW,cssH);
+
+    if(pts.length < 2){
+      ctx.fillStyle="rgba(255,255,255,.35)";
+      ctx.font="12px sans-serif";
+      ctx.fillText("データ蓄積中…",10,cssH/2);
+      return;
+    }
+
+    const prices=pts.map(x=>x.price);
+    const minP=Math.min(...prices), maxP=Math.max(...prices);
+    const spread=Math.max(maxP-minP, maxP*0.0002);
+    const pad=spread*0.12;
+    const yMin=minP-pad, yMax=maxP+pad;
+    const minT=pts[0].t, maxT=pts[pts.length-1].t;
+
+    const X=t => 5 + ((t-minT)/(maxT-minT || 1))*(cssW-10);
+    const Y=p => cssH-5 - ((p-yMin)/(yMax-yMin || 1))*(cssH-10);
+
+    ctx.strokeStyle="rgba(255,255,255,.07)";
+    ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(0,cssH/2); ctx.lineTo(cssW,cssH/2); ctx.stroke();
+
+    const first=pts[0].price, last=pts[pts.length-1].price;
+    ctx.strokeStyle = last >= first ? "#69d7a7" : "#ff8b96";
+    ctx.lineWidth=1.7;
+    ctx.beginPath();
+    pts.forEach((p,i)=>{
+      const x=X(p.t), y=Y(p.price);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+  }
+
+  function renderAllCharts(){
+    const rows = COINS.map(calc);
+    $("allCharts").innerHTML = rows.map(d => `
+      <div class="compactCard">
+        <div class="compactTop">
+          <div>
+            <div class="coin" style="font-size:17px">${d.coin}</div>
+            <div class="compactPrice">${fmtPrice(d.last)}</div>
+          </div>
+          <div class="compactMove">${d.ready ? pct(d.change2) : "準備中"}</div>
+        </div>
+        <canvas class="miniChart" data-chart="${d.coin}"></canvas>
+      </div>
+    `).join("");
+
+    document.querySelectorAll("canvas[data-chart]").forEach(c=>{
+      drawMiniChart(c, c.dataset.chart);
+    });
   }
 
   let ws, received=0;

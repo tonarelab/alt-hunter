@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#07111f">
-<title>ALT HUNTER v1.2</title>
+<title>ALT HUNTER v1.3</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#07111f;color:#eef5ff}
@@ -37,6 +37,10 @@ h1{margin:0;font-size:32px}
 .compactPrice{font-size:16px;font-weight:750;margin-top:4px}
 .compactMove{font-size:12px;color:#9eb0c6}
 .sectionTitle{margin-top:20px;font-size:18px;font-weight:800}
+.tfBar{display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px;-webkit-overflow-scrolling:touch}
+.tfBtn{border:1px solid #26384f;background:#0c1828;color:#9fb2c9;border-radius:999px;padding:7px 11px;font-size:12px;white-space:nowrap}
+.tfBtn.active{background:#183653;border-color:#3976a7;color:#eaf5ff}
+
 @media(max-width:620px){.allGrid{grid-template-columns:1fr}}
 
 @media(max-width:620px){.metrics{grid-template-columns:1fr 1fr}.metric:last-child{grid-column:1/-1}}
@@ -47,7 +51,7 @@ h1{margin:0;font-size:32px}
   <div class="top">
     <div>
       <h1>ALT HUNTER</h1>
-      <div class="sub">Binance市場で監視 → 日本で買えるアルトだけ表示 v1.2</div>
+      <div class="sub">Binance市場で監視 → 日本で買えるアルトだけ表示 v1.3</div>
       <div id="diag" class="sub">起動中…</div>
     </div>
     <div id="status" class="status">接続中…</div>
@@ -82,12 +86,23 @@ h1{margin:0;font-size:32px}
   </div>
 
   <div class="sectionTitle">全銘柄ミニチャート</div>
-  <div class="sub">直近30分・1分足×30本・常時更新</div>
+  <div class="sub">時間足を一括切り替え</div>
+  <div id="tfBar" class="tfBar">
+    <button class="tfBtn" data-tf="1w">週足</button>
+    <button class="tfBtn" data-tf="1d">日足</button>
+    <button class="tfBtn" data-tf="4h">4時間</button>
+    <button class="tfBtn" data-tf="1h">1時間</button>
+    <button class="tfBtn" data-tf="15m">15分</button>
+    <button class="tfBtn" data-tf="5m">5分</button>
+    <button class="tfBtn active" data-tf="1m">1分</button>
+    <button class="tfBtn" data-tf="tick">Tick</button>
+  </div>
+  <div id="chartStatus" class="sub">1分足を表示中</div>
   <div id="allCharts" class="allGrid"></div>
 
   <div class="footer">
     この版は売買推奨ではなく、チャートを開く候補を探すレーダーです。<br>
-    Binance市場のUSDTペアを監視し、日本で買える対象だけ表示します。上昇時は高値まで、下落時は安値までの距離を表示し、全銘柄の直近30分を1分足ローソク×30本で常時表示します。
+    Binance市場のUSDTペアを監視し、日本で買える対象だけ表示します。上昇時は高値まで、下落時は安値までの距離を表示し、全銘柄チャートは週足・日足・4時間・1時間・15分・5分・1分・Tickを一括切り替えできます。
   </div>
 </div>
 
@@ -221,145 +236,176 @@ h1{margin:0;font-size:32px}
   }
 
 
-  function buildCandles(coin){
-    const s = state[coin];
-    if(!s || !s.trades.length) return [];
-    const now = Date.now();
-    const startMinute = Math.floor((now - 30*60_000)/60_000)*60_000;
-    const buckets = new Map();
+  let selectedTf = "1m";
+  const history = {};
+  const TF_LABELS = {
+    "1w":"週足","1d":"日足","4h":"4時間","1h":"1時間",
+    "15m":"15分","5m":"5分","1m":"1分","tick":"Tick"
+  };
 
-    for(const t of s.trades){
-      if(t.t < startMinute) continue;
-      const m = Math.floor(t.t/60_000)*60_000;
-      if(!buckets.has(m)){
-        buckets.set(m, {time:m, open:t.price, high:t.price, low:t.price, close:t.price, volume:t.usd});
-      } else {
-        const c = buckets.get(m);
-        c.high = Math.max(c.high, t.price);
-        c.low = Math.min(c.low, t.price);
-        c.close = t.price;
-        c.volume += t.usd;
-      }
-    }
+  for(const c of COINS) history[c] = [];
 
-    const arr = [...buckets.values()].sort((a,b)=>a.time-b.time).slice(-30);
-
-    // Fill missing minutes with flat candles using last known close
-    const out = [];
-    if(!arr.length) return out;
-
-    const firstTime = arr[0].time;
-    const lastTime = Math.floor(now/60_000)*60_000;
-    let lastClose = arr[0].open;
-    const map = new Map(arr.map(c=>[c.time,c]));
-
-    for(let tm=Math.max(firstTime, lastTime-29*60_000); tm<=lastTime; tm+=60_000){
-      if(map.has(tm)){
-        const c = map.get(tm);
-        lastClose = c.close;
-        out.push(c);
-      } else {
-        out.push({time:tm, open:lastClose, high:lastClose, low:lastClose, close:lastClose, volume:0});
-      }
-    }
-    return out.slice(-30);
+  function intervalMs(tf){
+    return {
+      "1m":60_000,"5m":5*60_000,"15m":15*60_000,"1h":60*60_000,
+      "4h":4*60*60_000,"1d":24*60*60_000,"1w":7*24*60*60_000
+    }[tf] || 60_000;
   }
 
-  function drawMiniChart(canvas, coin){
-    const candles = buildCandles(coin);
-    const ctx = canvas.getContext("2d");
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
-    const cssW = canvas.clientWidth || 320;
-    const cssH = canvas.clientHeight || 92;
-    const w = Math.floor(cssW*dpr), h = Math.floor(cssH*dpr);
-
-    if(canvas.width !== w || canvas.height !== h){
-      canvas.width = w;
-      canvas.height = h;
+  function aggregateLocalTrades(coin, tf, count=30){
+    const s = state[coin];
+    if(!s || !s.trades.length || tf==="tick") return [];
+    const ms = intervalMs(tf);
+    const buckets = new Map();
+    for(const t of s.trades){
+      const key = Math.floor(t.t/ms)*ms;
+      if(!buckets.has(key)){
+        buckets.set(key,{time:key,open:t.price,high:t.price,low:t.price,close:t.price,volume:t.usd});
+      }else{
+        const c=buckets.get(key);
+        c.high=Math.max(c.high,t.price); c.low=Math.min(c.low,t.price);
+        c.close=t.price; c.volume+=t.usd;
+      }
     }
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-    ctx.clearRect(0,0,cssW,cssH);
+    return [...buckets.values()].sort((a,b)=>a.time-b.time).slice(-count);
+  }
 
-    if(candles.length < 2){
-      ctx.fillStyle="rgba(255,255,255,.35)";
-      ctx.font="12px sans-serif";
-      ctx.fillText("1分足を作成中…",10,cssH/2);
+  async function fetchKlines(coin, tf){
+    if(tf==="tick") return [];
+    const symbol = coin+"USDT";
+    const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${tf}&limit=30`;
+    const res = await fetch(url,{cache:"no-store"});
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const rows = await res.json();
+    return rows.map(r=>({
+      time:Number(r[0]), open:Number(r[1]), high:Number(r[2]), low:Number(r[3]),
+      close:Number(r[4]), volume:Number(r[7] || r[5] || 0)
+    }));
+  }
+
+  async function loadHistory(tf){
+    selectedTf=tf;
+    document.querySelectorAll(".tfBtn").forEach(b=>b.classList.toggle("active", b.dataset.tf===tf));
+    $("chartStatus").textContent = tf==="tick" ? "Tickを表示中" : `${TF_LABELS[tf]}を読み込み中…`;
+
+    if(tf==="tick"){
+      renderAllCharts();
+      $("chartStatus").textContent="Tickを表示中";
       return;
     }
 
-    const priceH = cssH*0.72;
-    const volTop = cssH*0.78;
-    const volH = cssH*0.18;
-
-    const highs = candles.map(c=>c.high);
-    const lows = candles.map(c=>c.low);
-    let minP = Math.min(...lows), maxP = Math.max(...highs);
-    if(maxP === minP){
-      const pad = Math.max(maxP*0.0005, 1e-8);
-      maxP += pad; minP -= pad;
+    let done=0, failed=0;
+    const queue=[...COINS];
+    async function worker(){
+      while(queue.length){
+        const coin=queue.shift();
+        try{
+          history[coin]=await fetchKlines(coin,tf);
+        }catch(e){
+          failed++;
+          history[coin]=aggregateLocalTrades(coin,tf,30);
+        }
+        done++;
+        $("chartStatus").textContent = `${TF_LABELS[tf]} 読込 ${done}/${COINS.length}${failed?`（代替 ${failed}）`:""}`;
+        if(done%4===0 || done===COINS.length) renderAllCharts();
+      }
     }
-    const pad = (maxP-minP)*0.08;
-    minP -= pad; maxP += pad;
+    await Promise.all([worker(),worker(),worker(),worker()]);
+    $("chartStatus").textContent = failed
+      ? `${TF_LABELS[tf]}表示中（一部は受信データから生成）`
+      : `${TF_LABELS[tf]}表示中`;
+    renderAllCharts();
+  }
 
-    const maxV = Math.max(...candles.map(c=>c.volume), 1);
-    const cellW = cssW / candles.length;
-    const bodyW = Math.max(3, cellW*0.5);
+  function drawTick(canvas, coin){
+    const s=state[coin];
+    if(!s || s.trades.length<2) return false;
+    const now=Date.now();
+    const pts=s.trades.filter(x=>x.t>=now-30*60_000);
+    if(pts.length<2) return false;
 
-    const Y = p => 4 + (maxP-p)/(maxP-minP)*(priceH-8);
+    const ctx=canvas.getContext("2d");
+    const dpr=Math.max(1,window.devicePixelRatio||1);
+    const cssW=canvas.clientWidth||320, cssH=canvas.clientHeight||112;
+    canvas.width=Math.floor(cssW*dpr); canvas.height=Math.floor(cssH*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,cssW,cssH);
 
-    // Mid grid
-    ctx.strokeStyle="rgba(255,255,255,.06)";
-    ctx.lineWidth=1;
-    ctx.beginPath();
-    ctx.moveTo(0, priceH/2); ctx.lineTo(cssW, priceH/2); ctx.stroke();
+    const ps=pts.map(x=>x.price), mn=Math.min(...ps), mx=Math.max(...ps);
+    const spread=Math.max(mx-mn,mx*0.0002), pad=spread*.1;
+    const minP=mn-pad,maxP=mx+pad,minT=pts[0].t,maxT=pts[pts.length-1].t;
+    const X=t=>5+(t-minT)/(maxT-minT||1)*(cssW-10);
+    const Y=p=>cssH-5-(p-minP)/(maxP-minP||1)*(cssH-10);
+
+    ctx.strokeStyle=pts[pts.length-1].price>=pts[0].price?"#69d7a7":"#ff8b96";
+    ctx.lineWidth=1.5; ctx.beginPath();
+    pts.forEach((p,i)=>{const x=X(p.t),y=Y(p.price);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});
+    ctx.stroke(); return true;
+  }
+
+  function drawCandles(canvas, candles){
+    const ctx=canvas.getContext("2d");
+    const dpr=Math.max(1,window.devicePixelRatio||1);
+    const cssW=canvas.clientWidth||320, cssH=canvas.clientHeight||112;
+    canvas.width=Math.floor(cssW*dpr); canvas.height=Math.floor(cssH*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,cssW,cssH);
+
+    if(!candles || candles.length<2){
+      ctx.fillStyle="rgba(255,255,255,.35)"; ctx.font="12px sans-serif";
+      ctx.fillText("データ読込中…",10,cssH/2); return;
+    }
+
+    const priceH=cssH*.72, volTop=cssH*.79, volH=cssH*.16;
+    let mn=Math.min(...candles.map(c=>c.low)), mx=Math.max(...candles.map(c=>c.high));
+    if(mx===mn){const p=Math.max(mx*.0005,1e-8);mx+=p;mn-=p}
+    const pad=(mx-mn)*.08; mn-=pad;mx+=pad;
+    const maxV=Math.max(...candles.map(c=>c.volume),1);
+    const cellW=cssW/candles.length, bodyW=Math.max(2,cellW*.55);
+    const Y=p=>4+(mx-p)/(mx-mn)*(priceH-8);
 
     candles.forEach((c,i)=>{
-      const x = i*cellW + cellW/2;
-      const up = c.close >= c.open;
-      const col = up ? "#69d7a7" : "#ff8b96";
-
-      // wick
-      ctx.strokeStyle = col;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(x, Y(c.high));
-      ctx.lineTo(x, Y(c.low));
-      ctx.stroke();
-
-      // body
-      const yOpen = Y(c.open), yClose = Y(c.close);
-      const top = Math.min(yOpen,yClose);
-      const bodyH = Math.max(1.5, Math.abs(yClose-yOpen));
-      ctx.fillStyle = col;
-      ctx.fillRect(x-bodyW/2, top, bodyW, bodyH);
-
-      // volume
-      const vh = (c.volume/maxV)*volH;
-      ctx.globalAlpha = 0.45;
-      ctx.fillRect(x-bodyW/2, volTop + (volH-vh), bodyW, vh);
-      ctx.globalAlpha = 1;
+      const x=i*cellW+cellW/2, up=c.close>=c.open, col=up?"#69d7a7":"#ff8b96";
+      ctx.strokeStyle=col;ctx.lineWidth=1;ctx.beginPath();
+      ctx.moveTo(x,Y(c.high));ctx.lineTo(x,Y(c.low));ctx.stroke();
+      const yo=Y(c.open),yc=Y(c.close),top=Math.min(yo,yc),bh=Math.max(1.4,Math.abs(yc-yo));
+      ctx.fillStyle=col;ctx.fillRect(x-bodyW/2,top,bodyW,bh);
+      const vh=(c.volume/maxV)*volH;ctx.globalAlpha=.38;
+      ctx.fillRect(x-bodyW/2,volTop+(volH-vh),bodyW,vh);ctx.globalAlpha=1;
     });
   }
 
   function renderAllCharts(){
-    const rows = COINS.map(calc);
-    $("allCharts").innerHTML = rows.map(d => `
+    const rows=COINS.map(calc);
+    $("allCharts").innerHTML=rows.map(d=>`
       <div class="compactCard">
         <div class="compactTop">
           <div>
             <div class="coin" style="font-size:17px">${d.coin}</div>
             <div class="compactPrice">${fmtPrice(d.last)}</div>
           </div>
-          <div class="compactMove">${d.ready ? pct(d.change2) : "準備中"}</div>
+          <div class="compactMove">${d.ready?pct(d.change2):"準備中"}</div>
         </div>
         <canvas class="miniChart" data-chart="${d.coin}"></canvas>
-      </div>
-    `).join("");
+      </div>`).join("");
 
     document.querySelectorAll("canvas[data-chart]").forEach(c=>{
-      drawMiniChart(c, c.dataset.chart);
+      const coin=c.dataset.chart;
+      if(selectedTf==="tick"){
+        if(!drawTick(c,coin)){
+          const ctx=c.getContext("2d"); ctx.fillStyle="rgba(255,255,255,.35)";
+          ctx.font="12px sans-serif"; ctx.fillText("Tick蓄積中…",10,40);
+        }
+      }else{
+        const candles=(history[coin]&&history[coin].length)
+          ? history[coin]
+          : aggregateLocalTrades(coin,selectedTf,30);
+        drawCandles(c,candles);
+      }
     });
   }
+
+  document.querySelectorAll(".tfBtn").forEach(btn=>{
+    btn.addEventListener("click",()=>loadHistory(btn.dataset.tf));
+  });
 
   let ws, received=0;
   function connect(){
@@ -384,7 +430,21 @@ h1{margin:0;font-size:32px}
         if(d && d.e==="aggTrade"){
           const sym=d.s.toUpperCase();
           const coin=sym.replace(/USDT$/,"");
-          addTrade(coin, Number(d.T||d.E), Number(d.p), Number(d.q));
+          const t=Number(d.T||d.E), p=Number(d.p), q=Number(d.q);
+          addTrade(coin,t,p,q);
+          if(selectedTf!=="tick" && history[coin] && history[coin].length){
+            const ms=intervalMs(selectedTf);
+            const key=Math.floor(t/ms)*ms;
+            let last=history[coin][history[coin].length-1];
+            const usd=p*q;
+            if(last && last.time===key){
+              last.high=Math.max(last.high,p); last.low=Math.min(last.low,p);
+              last.close=p; last.volume+=usd;
+            }else if(!last || key>last.time){
+              history[coin].push({time:key,open:p,high:p,low:p,close:p,volume:usd});
+              history[coin]=history[coin].slice(-30);
+            }
+          }
         }
       }catch(_){}
     };
@@ -405,6 +465,7 @@ h1{margin:0;font-size:32px}
 
   connect();
   render();
+  loadHistory("1m");
   setInterval(render,2000);
 })();
 </script>

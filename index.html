@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#07111f">
-<title>ALT HUNTER v0.7</title>
+<title>ALT HUNTER v0.9</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#07111f;color:#eef5ff}
@@ -25,6 +25,8 @@ h1{margin:0;font-size:32px}
 .price{font-size:22px;font-weight:700;margin-top:8px}
 .tag{font-size:12px;padding:5px 8px;border-radius:999px;background:#11303a;color:#8ce5ef}
 .tag.hot{background:#3a2413;color:#ffd08c}
+.tag.down{background:#35161b;color:#ff9aa5}
+.card.down{border-color:#6b2b36}
 .muted{color:#7890ad}
 .empty{text-align:center;color:#8298b2;padding:22px}
 .footer{margin-top:20px;color:#6f849e;font-size:11px;line-height:1.6}
@@ -36,7 +38,7 @@ h1{margin:0;font-size:32px}
   <div class="top">
     <div>
       <h1>ALT HUNTER</h1>
-      <div class="sub">Binance市場で監視 → 日本で買えるアルトだけ表示 v0.7</div>
+      <div class="sub">Binance市場で監視 → 日本で買えるアルトだけ表示 v0.9</div>
       <div id="diag" class="sub">起動中…</div>
     </div>
     <div id="status" class="status">接続中…</div>
@@ -49,7 +51,7 @@ h1{margin:0;font-size:32px}
     </div>
     <div class="metrics">
       <div class="metric"><span>異変条件</span><b>出来高 2.0倍</b></div>
-      <div class="metric"><span>価格条件</span><b>2分 +1.0%</b></div>
+      <div class="metric"><span>価格条件</span><b>2分 ±1.0%</b></div>
       <div class="metric"><span>表示対象</span><b>Binance Japan取扱</b></div>
     </div>
   </div>
@@ -72,7 +74,7 @@ h1{margin:0;font-size:32px}
 
   <div class="footer">
     この版は売買推奨ではなく、チャートを開く候補を探すレーダーです。<br>
-    Binance市場のUSDTペアを監視し、日本で買える対象だけ表示します。
+    Binance市場のUSDTペアを監視し、日本で買える対象だけ表示します。上昇時は高値まで、下落時は安値までの距離を表示します。
   </div>
 </div>
 
@@ -141,31 +143,59 @@ h1{margin:0;font-size:32px}
 
     const tr10=tr.filter(x=>x.t>=now-10*60_000);
     const high10=tr10.length?Math.max(...tr10.map(x=>x.price)):null;
+    const low10=tr10.length?Math.min(...tr10.map(x=>x.price)):null;
     const toHigh=s.last&&high10?(high10/s.last-1)*100:null;
+    const toLow=s.last&&low10?(s.last/low10-1)*100:null;
+    const rangePos=(s.last!=null && high10!=null && low10!=null && high10>low10)
+      ? ((s.last-low10)/(high10-low10))*100
+      : null;
 
     const ready=(now-(s.firstSeen||now))>=MIN_BASELINE_MS && ratio!=null && change2!=null;
-    const hot=ready && ratio>=VOL_TRIGGER && change2>=PRICE_TRIGGER;
-    return {coin,ready,hot,last:s.last,ratio,change2,toHigh};
+    const up=ready && ratio>=VOL_TRIGGER && change2>=PRICE_TRIGGER;
+    const down=ready && ratio>=VOL_TRIGGER && change2<=-PRICE_TRIGGER;
+    const hot=up || down;
+    const direction=up ? "up" : down ? "down" : null;
+    return {coin,ready,hot,direction,last:s.last,ratio,change2,toHigh,toLow,rangePos};
   }
 
   function card(d){
-    return `<div class="card">
+    const tag = d.direction==="up"
+      ? "🔥 上昇異変"
+      : d.direction==="down"
+        ? "🔻 下落異変"
+        : d.ready
+          ? "👀 監視"
+          : "準備中";
+
+    const extraClass = d.direction==="up" ? " hot" : d.direction==="down" ? " down" : "";
+
+    return `<div class="card${extraClass}">
       <div class="row">
         <div class="coin">${d.coin}</div>
-        <div class="tag ${d.hot?"hot":""}">${d.hot?"🔥 異変":d.ready?"👀 監視":"準備中"}</div>
+        <div class="tag ${d.direction==="up"?"hot":d.direction==="down"?"down":""}">${tag}</div>
       </div>
       <div class="price">${fmtPrice(d.last)}</div>
       <div class="metrics">
         <div class="metric"><span>直近2分出来高</span><b>${d.ready?mult(d.ratio):"—"}</b></div>
         <div class="metric"><span>2分価格</span><b>${d.ready?pct(d.change2):"—"}</b></div>
-        <div class="metric"><span>10分高値まで</span><b>${d.ready&&d.toHigh!=null?d.toHigh.toFixed(2)+"%":"—"}</b></div>
+        <div class="metric"><span>${
+          d.direction==="up" ? "10分高値まで" :
+          d.direction==="down" ? "10分安値まで" :
+          "10分レンジ位置"
+        }</span><b>${
+          !d.ready ? "—" :
+          d.direction==="up" && d.toHigh!=null ? d.toHigh.toFixed(2)+"%" :
+          d.direction==="down" && d.toLow!=null ? d.toLow.toFixed(2)+"%" :
+          d.rangePos!=null ? d.rangePos.toFixed(0)+"%" :
+          "—"
+        }</b></div>
       </div>
     </div>`;
   }
 
   function render(){
     const arr=COINS.map(calc);
-    const hot=arr.filter(x=>x.hot).sort((a,b)=>(b.ratio||0)-(a.ratio||0));
+    const hot=arr.filter(x=>x.hot).sort((a,b)=>(((b.ratio||0)*Math.abs(b.change2||0))-((a.ratio||0)*Math.abs(a.change2||0))));
     $("signals").innerHTML = hot.length ? hot.map(card).join("") :
       `<div class="panel empty">いま異変はありません。市場を見張っています。</div>`;
 

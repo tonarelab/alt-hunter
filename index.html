@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#07111f">
-<title>ALT HUNTER v0.5</title>
+<title>ALT HUNTER v0.6</title>
 <style>
   *{box-sizing:border-box}
   body{
@@ -58,7 +58,7 @@
   <div class="top">
     <div>
       <h1>ALT HUNTER</h1>
-      <div class="sub">日本で買えるアルトの「異変」だけを見る v0.5</div><div id="diag" class="sub" style="margin-top:3px;font-size:11px">起動しています…</div>
+      <div class="sub">日本で買えるアルトの「異変」だけを見る v0.6</div><div id="diag" class="sub" style="margin-top:3px;font-size:11px">起動しています…</div>
     </div>
     <div id="status" class="status">接続中…</div>
   </div>
@@ -78,6 +78,15 @@
     </div>
   </div>
 
+  <div class="panel">
+    <div class="row"><strong>通信診断</strong><span id="wsState" class="muted">未接続</span></div>
+    <div class="metrics" style="margin-top:10px">
+      <div class="metric"><span>購読済み</span><b id="subCount">0 / 23</b></div>
+      <div class="metric"><span>受信件数</span><b id="msgCount">0</b></div>
+      <div class="metric"><span>最終受信</span><b id="lastMsg">—</b></div>
+    </div>
+  </div>
+
   <div id="signals" class="grid"></div>
 
   <div class="panel">
@@ -89,7 +98,7 @@
   </div>
 
   <div class="footer">
-    これは売買推奨ではなく、チャートを開く候補を探すレーダーです。v0.5はWeb公開前提の安定版です。<br>
+    これは売買推奨ではなく、チャートを開く候補を探すレーダーです。v0.6は通信診断つきです。<br>
     最初の約2〜4分は基準値を作るため「準備中」になります。ページを閉じると監視も止まります。
   </div>
 </div>
@@ -229,18 +238,42 @@
   }
 
   let ws;
+  let receivedMessages = 0;
+  let subscribed = 0;
+
   function connect(){
     const status = $("status");
-    ws = new WebSocket("wss://ws-api.coincheck.com/");
+    $("wsState").textContent = "接続中";
+    $("diag").textContent = "Coincheck WebSocketへ接続中…";
+
+    ws = new WebSocket("wss://ws-api.coincheck.com");
+
     ws.onopen = () => {
       status.textContent = "● LIVE";
-      $("diag").textContent = `WebSocket接続済み・${ALL.length}銘柄を監視中`;
       status.className = "status live";
-      for(const pair of ALL){
-        ws.send(JSON.stringify({type:"subscribe", channel:`${pair}-trades`}));
-      }
+      $("wsState").textContent = "OPEN";
+      $("diag").textContent = `WebSocket接続済み。購読を開始します`;
+      subscribed = 0;
+
+      // 一気に23本送らず100ms間隔で購読
+      ALL.forEach((pair, i) => {
+        setTimeout(() => {
+          if(ws && ws.readyState === WebSocket.OPEN){
+            ws.send(JSON.stringify({type:"subscribe", channel:`${pair}-trades`}));
+            subscribed++;
+            $("subCount").textContent = `${subscribed} / ${ALL.length}`;
+            if(subscribed === ALL.length){
+              $("diag").textContent = `${ALL.length}銘柄を監視中`;
+            }
+          }
+        }, i * 100);
+      });
     };
+
     ws.onmessage = e => {
+      receivedMessages++;
+      $("msgCount").textContent = receivedMessages.toLocaleString("ja-JP");
+      $("lastMsg").textContent = new Date().toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
       try{
         const data = JSON.parse(e.data);
         if(!Array.isArray(data)) return;
@@ -253,17 +286,22 @@
             addTrade(pair, ts, price, amount);
           }
         }
-      }catch(_){}
+      }catch(err){
+        $("diag").textContent = "受信データの解析エラー";
+      }
     };
-    ws.onclose = () => {
+
+    ws.onclose = e => {
       status.textContent = "再接続中…";
-      $("diag").textContent = "接続が切れました。自動再接続します";
       status.className = "status";
+      $("wsState").textContent = `CLOSED ${e.code || ""}`;
+      $("diag").textContent = "接続が切れました。2.5秒後に再接続します";
       setTimeout(connect, 2500);
     };
+
     ws.onerror = () => {
-      $("diag").textContent = "WebSocket接続エラー。再接続します";
-      try{ws.close()}catch(_){}
+      $("wsState").textContent = "ERROR";
+      $("diag").textContent = "WebSocket接続エラー";
     };
   }
 

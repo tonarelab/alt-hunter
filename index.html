@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#07111f">
-<title>ALT HUNTER v1.0</title>
+<title>ALT HUNTER v1.2</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#07111f;color:#eef5ff}
@@ -30,7 +30,7 @@ h1{margin:0;font-size:32px}
 .muted{color:#7890ad}
 .empty{text-align:center;color:#8298b2;padding:22px}
 .footer{margin-top:20px;color:#6f849e;font-size:11px;line-height:1.6}
-.miniChart{width:100%;height:72px;display:block;background:#091522;border-radius:10px;margin-top:10px}
+.miniChart{width:100%;height:112px;display:block;background:#091522;border-radius:10px;margin-top:10px}
 .allGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
 .compactCard{background:#0c1828;border:1px solid #1f3045;border-radius:16px;padding:12px}
 .compactTop{display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -47,7 +47,7 @@ h1{margin:0;font-size:32px}
   <div class="top">
     <div>
       <h1>ALT HUNTER</h1>
-      <div class="sub">Binance市場で監視 → 日本で買えるアルトだけ表示 v1.0</div>
+      <div class="sub">Binance市場で監視 → 日本で買えるアルトだけ表示 v1.2</div>
       <div id="diag" class="sub">起動中…</div>
     </div>
     <div id="status" class="status">接続中…</div>
@@ -82,12 +82,12 @@ h1{margin:0;font-size:32px}
   </div>
 
   <div class="sectionTitle">全銘柄ミニチャート</div>
-  <div class="sub">直近10分・常時更新</div>
+  <div class="sub">直近30分・1分足×30本・常時更新</div>
   <div id="allCharts" class="allGrid"></div>
 
   <div class="footer">
     この版は売買推奨ではなく、チャートを開く候補を探すレーダーです。<br>
-    Binance市場のUSDTペアを監視し、日本で買える対象だけ表示します。上昇時は高値まで、下落時は安値までの距離を表示し、全銘柄の直近10分ミニチャートを常時表示します。
+    Binance市場のUSDTペアを監視し、日本で買える対象だけ表示します。上昇時は高値まで、下落時は安値までの距離を表示し、全銘柄の直近30分を1分足ローソク×30本で常時表示します。
   </div>
 </div>
 
@@ -105,7 +105,7 @@ h1{margin:0;font-size:32px}
   const url = "wss://stream.binance.com:9443/stream?streams=" + streams.join("/");
 
   const state = {};
-  const MAX_MS = 12*60*1000;
+  const MAX_MS = 35*60*1000;
   const MIN_BASELINE_MS = 2*60*1000;
   const VOL_TRIGGER = 2.0;
   const PRICE_TRIGGER = 1.0;
@@ -221,55 +221,124 @@ h1{margin:0;font-size:32px}
   }
 
 
-  function drawMiniChart(canvas, coin){
+  function buildCandles(coin){
     const s = state[coin];
-    if(!canvas || !s || !s.trades.length) return;
-
+    if(!s || !s.trades.length) return [];
     const now = Date.now();
-    const pts = s.trades.filter(x => x.t >= now-10*60_000);
+    const startMinute = Math.floor((now - 30*60_000)/60_000)*60_000;
+    const buckets = new Map();
+
+    for(const t of s.trades){
+      if(t.t < startMinute) continue;
+      const m = Math.floor(t.t/60_000)*60_000;
+      if(!buckets.has(m)){
+        buckets.set(m, {time:m, open:t.price, high:t.price, low:t.price, close:t.price, volume:t.usd});
+      } else {
+        const c = buckets.get(m);
+        c.high = Math.max(c.high, t.price);
+        c.low = Math.min(c.low, t.price);
+        c.close = t.price;
+        c.volume += t.usd;
+      }
+    }
+
+    const arr = [...buckets.values()].sort((a,b)=>a.time-b.time).slice(-30);
+
+    // Fill missing minutes with flat candles using last known close
+    const out = [];
+    if(!arr.length) return out;
+
+    const firstTime = arr[0].time;
+    const lastTime = Math.floor(now/60_000)*60_000;
+    let lastClose = arr[0].open;
+    const map = new Map(arr.map(c=>[c.time,c]));
+
+    for(let tm=Math.max(firstTime, lastTime-29*60_000); tm<=lastTime; tm+=60_000){
+      if(map.has(tm)){
+        const c = map.get(tm);
+        lastClose = c.close;
+        out.push(c);
+      } else {
+        out.push({time:tm, open:lastClose, high:lastClose, low:lastClose, close:lastClose, volume:0});
+      }
+    }
+    return out.slice(-30);
+  }
+
+  function drawMiniChart(canvas, coin){
+    const candles = buildCandles(coin);
     const ctx = canvas.getContext("2d");
     const dpr = Math.max(1, window.devicePixelRatio || 1);
     const cssW = canvas.clientWidth || 320;
-    const cssH = canvas.clientHeight || 72;
+    const cssH = canvas.clientHeight || 92;
     const w = Math.floor(cssW*dpr), h = Math.floor(cssH*dpr);
 
     if(canvas.width !== w || canvas.height !== h){
-      canvas.width=w; canvas.height=h;
+      canvas.width = w;
+      canvas.height = h;
     }
     ctx.setTransform(dpr,0,0,dpr,0,0);
     ctx.clearRect(0,0,cssW,cssH);
 
-    if(pts.length < 2){
+    if(candles.length < 2){
       ctx.fillStyle="rgba(255,255,255,.35)";
       ctx.font="12px sans-serif";
-      ctx.fillText("データ蓄積中…",10,cssH/2);
+      ctx.fillText("1分足を作成中…",10,cssH/2);
       return;
     }
 
-    const prices=pts.map(x=>x.price);
-    const minP=Math.min(...prices), maxP=Math.max(...prices);
-    const spread=Math.max(maxP-minP, maxP*0.0002);
-    const pad=spread*0.12;
-    const yMin=minP-pad, yMax=maxP+pad;
-    const minT=pts[0].t, maxT=pts[pts.length-1].t;
+    const priceH = cssH*0.72;
+    const volTop = cssH*0.78;
+    const volH = cssH*0.18;
 
-    const X=t => 5 + ((t-minT)/(maxT-minT || 1))*(cssW-10);
-    const Y=p => cssH-5 - ((p-yMin)/(yMax-yMin || 1))*(cssH-10);
+    const highs = candles.map(c=>c.high);
+    const lows = candles.map(c=>c.low);
+    let minP = Math.min(...lows), maxP = Math.max(...highs);
+    if(maxP === minP){
+      const pad = Math.max(maxP*0.0005, 1e-8);
+      maxP += pad; minP -= pad;
+    }
+    const pad = (maxP-minP)*0.08;
+    minP -= pad; maxP += pad;
 
-    ctx.strokeStyle="rgba(255,255,255,.07)";
+    const maxV = Math.max(...candles.map(c=>c.volume), 1);
+    const cellW = cssW / candles.length;
+    const bodyW = Math.max(3, cellW*0.5);
+
+    const Y = p => 4 + (maxP-p)/(maxP-minP)*(priceH-8);
+
+    // Mid grid
+    ctx.strokeStyle="rgba(255,255,255,.06)";
     ctx.lineWidth=1;
     ctx.beginPath();
-    ctx.moveTo(0,cssH/2); ctx.lineTo(cssW,cssH/2); ctx.stroke();
+    ctx.moveTo(0, priceH/2); ctx.lineTo(cssW, priceH/2); ctx.stroke();
 
-    const first=pts[0].price, last=pts[pts.length-1].price;
-    ctx.strokeStyle = last >= first ? "#69d7a7" : "#ff8b96";
-    ctx.lineWidth=1.7;
-    ctx.beginPath();
-    pts.forEach((p,i)=>{
-      const x=X(p.t), y=Y(p.price);
-      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    candles.forEach((c,i)=>{
+      const x = i*cellW + cellW/2;
+      const up = c.close >= c.open;
+      const col = up ? "#69d7a7" : "#ff8b96";
+
+      // wick
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, Y(c.high));
+      ctx.lineTo(x, Y(c.low));
+      ctx.stroke();
+
+      // body
+      const yOpen = Y(c.open), yClose = Y(c.close);
+      const top = Math.min(yOpen,yClose);
+      const bodyH = Math.max(1.5, Math.abs(yClose-yOpen));
+      ctx.fillStyle = col;
+      ctx.fillRect(x-bodyW/2, top, bodyW, bodyH);
+
+      // volume
+      const vh = (c.volume/maxV)*volH;
+      ctx.globalAlpha = 0.45;
+      ctx.fillRect(x-bodyW/2, volTop + (volH-vh), bodyW, vh);
+      ctx.globalAlpha = 1;
     });
-    ctx.stroke();
   }
 
   function renderAllCharts(){

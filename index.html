@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#07111f">
-<title>ALT HUNTER v1.3</title>
+<title>ALT HUNTER v1.5</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#07111f;color:#eef5ff}
@@ -27,6 +27,8 @@ h1{margin:0;font-size:32px}
 .tag.hot{background:#3a2413;color:#ffd08c}
 .tag.down{background:#35161b;color:#ff9aa5}
 .card.down{border-color:#6b2b36}
+.retained{opacity:.98}
+.alertMeta{margin-top:8px;font-size:12px;color:#8ea2bd}
 .muted{color:#7890ad}
 .empty{text-align:center;color:#8298b2;padding:22px}
 .footer{margin-top:20px;color:#6f849e;font-size:11px;line-height:1.6}
@@ -51,7 +53,7 @@ h1{margin:0;font-size:32px}
   <div class="top">
     <div>
       <h1>ALT HUNTER</h1>
-      <div class="sub">Binance市場で監視 → 日本で買えるアルトだけ表示 v1.3</div>
+      <div class="sub">Binance市場で監視 → 日本で買えるアルトだけ表示 v1.5</div>
       <div id="diag" class="sub">起動中…</div>
     </div>
     <div id="status" class="status">接続中…</div>
@@ -102,7 +104,7 @@ h1{margin:0;font-size:32px}
 
   <div class="footer">
     この版は売買推奨ではなく、チャートを開く候補を探すレーダーです。<br>
-    Binance市場のUSDTペアを監視し、日本で買える対象だけ表示します。上昇時は高値まで、下落時は安値までの距離を表示し、全銘柄チャートは週足・日足・4時間・1時間・15分・5分・1分・Tickを一括切り替えできます。
+    Binance市場のUSDTペアを監視し、日本で買える対象だけ表示します。上昇時は高値まで、下落時は安値までの距離を表示し、異変は検知後15分間保持し、複数銘柄を最新順で表示します。同一銘柄は再検知時に更新されます。全銘柄チャートは週足・日足・4時間・1時間・15分・5分・1分・Tickを一括切り替えできます。Binance Japanで取引所方式が一時中止中のIMX・GRT・CHZは除外しています。
   </div>
 </div>
 
@@ -112,8 +114,7 @@ h1{margin:0;font-size:32px}
   // v0.7では「確実に動くこと」を優先し、対象は少なめから開始。
   const COINS = [
     "ETH","XRP","BNB","SOL","ADA","AVAX","DOT","LINK","DOGE","SHIB",
-    "SUI","PEPE","TRX","MANA","CHZ","IMX","MASK","GRT","FET","TAO",
-    "TRB","MEME"
+    "SUI","PEPE","TRX","MANA","MASK","FET","TAO","TRB","MEME"
   ];
   const SYMBOLS = COINS.map(c => c.toLowerCase() + "usdt");
   const streams = SYMBOLS.map(s => s + "@aggTrade");
@@ -130,6 +131,8 @@ h1{margin:0;font-size:32px}
   $("subCount").textContent = streams.length;
 
   for(const coin of COINS) state[coin] = {trades:[], last:null, firstSeen:null};
+  const ALERT_HOLD_MS = 15*60*1000;
+  const alerts = {};
 
   function fmtPrice(v){
     if(v==null) return "—";
@@ -223,18 +226,68 @@ h1{margin:0;font-size:32px}
 
   function render(){
     const arr=COINS.map(calc);
-    const hot=arr.filter(x=>x.hot).sort((a,b)=>(((b.ratio||0)*Math.abs(b.change2||0))-((a.ratio||0)*Math.abs(a.change2||0))));
-    $("signals").innerHTML = hot.length ? hot.map(card).join("") :
+    const now=Date.now();
+
+    for(const d of arr){
+      if(d.hot){
+        alerts[d.coin]={
+          coin:d.coin,
+          direction:d.direction,
+          lastSeen:now,
+          snapshot:{
+            ratio:d.ratio,
+            change2:d.change2,
+            toHigh:d.toHigh,
+            toLow:d.toLow
+          }
+        };
+      }
+    }
+
+    for(const coin of Object.keys(alerts)){
+      if(now-alerts[coin].lastSeen > ALERT_HOLD_MS) delete alerts[coin];
+    }
+
+    const retained=Object.values(alerts).sort((a,b)=>b.lastSeen-a.lastSeen);
+
+    $("signals").innerHTML = retained.length ? retained.map(a=>{
+      const ageMin=Math.max(0,Math.floor((now-a.lastSeen)/60_000));
+      const d=calc(a.coin);
+      const up=a.direction==="up";
+      const tag=up ? "🔥 上昇異変" : "🔻 下落異変";
+      const cls=up ? "hot" : "down";
+      const snap=a.snapshot;
+      const thirdLabel=up ? "検知時 高値まで" : "検知時 安値まで";
+      const thirdVal=up
+        ? (snap.toHigh!=null ? snap.toHigh.toFixed(2)+"%" : "—")
+        : (snap.toLow!=null ? snap.toLow.toFixed(2)+"%" : "—");
+
+      return `<div class="card retained ${cls}">
+        <div class="row">
+          <div class="coin">${a.coin}</div>
+          <div class="tag ${cls}">${tag}</div>
+        </div>
+        <div class="price">${fmtPrice(d.last)}</div>
+        <div class="alertMeta">${ageMin===0 ? "たった今" : ageMin+"分前"}に検知</div>
+        <div class="metrics">
+          <div class="metric"><span>検知時 2分出来高</span><b>${mult(snap.ratio)}</b></div>
+          <div class="metric"><span>検知時 2分価格</span><b>${pct(snap.change2)}</b></div>
+          <div class="metric"><span>${thirdLabel}</span><b>${thirdVal}</b></div>
+        </div>
+      </div>`;
+    }).join("") :
       `<div class="panel empty">いま異変はありません。市場を見張っています。</div>`;
 
-    const watch=arr.filter(x=>!x.hot && x.last!=null)
-      .sort((a,b)=>((b.ratio||0)*2+(b.change2||0))-((a.ratio||0)*2+(a.change2||0)))
+    const alertCoins=new Set(retained.map(a=>a.coin));
+    const watch=arr.filter(x=>!alertCoins.has(x.coin) && x.last!=null)
+      .sort((a,b)=>((b.ratio||0)*2+Math.abs(b.change2||0))-((a.ratio||0)*2+Math.abs(a.change2||0)))
       .slice(0,6);
+
     $("watch").innerHTML = watch.length ? watch.map(card).join("") :
       `<div class="empty">データ受信待ち…</div>`;
+
     renderAllCharts();
   }
-
 
   let selectedTf = "1m";
   const history = {};

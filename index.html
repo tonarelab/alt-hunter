@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#07111f">
-<title>ALT HUNTER v1.10</title>
+<title>ALT HUNTER v1.11</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#07111f;color:#eef5ff}
@@ -60,7 +60,7 @@ h1{margin:0;font-size:32px}
   <div class="top">
     <div>
       <h1>ALT HUNTER</h1>
-      <div class="sub">Binance USDT市場で検知 → 日本で買えるアルトだけ表示 v1.10</div>
+      <div class="sub">Binance USDT市場で検知 → 日本で買えるアルトだけ表示 v1.11</div>
       <div id="diag" class="sub">起動中…</div>
     </div>
     <div id="status" class="status">接続中…</div>
@@ -109,15 +109,14 @@ h1{margin:0;font-size:32px}
   <div id="chartStatus" class="sub">1分足を表示中</div>
   <div class="tfHelp">
     <b>％表示の基準</b><br>
-    週足：今週の始値 → 現在 ／ 日足：今日の始値 → 現在<br>
-    4時間：現在の4時間足 ／ 1時間：現在の1時間足<br>
-    15分・5分・1分：それぞれ現在足 ／ Tick：表示範囲の先頭 → 現在
+    すべての時間軸で、<b>ミニチャートに表示されている範囲の先頭 → 現在</b> の騰落率を表示します。<br>
+    例：1時間足×30本なら約30時間、15分足×30本なら約7.5時間の変化率です。
   </div>
   <div id="allCharts" class="allGrid"></div>
 
   <div class="footer">
     この版は売買推奨ではなく、チャートを開く候補を探すレーダーです。<br>
-    Binance市場のUSDTペアを監視し、日本で買える対象だけ表示します。上昇時は高値まで、下落時は安値までの距離を表示し、監視銘柄にはシンボルマークを表示します。異変検知はBinanceのUSDT市場を基準にしており、日本円での実際の購入価格・スプレッド・取引方式とは一致しない場合があります。購入前にはBinance Japan側のJPY条件を確認してください。チャート右上の騰落率は選択中の時間足に連動します。異変判定は従来どおり2分基準です。異変は検知後15分間保持し、複数銘柄を最新順で表示します。同一銘柄は再検知時に更新されます。全銘柄チャートは週足・日足・4時間・1時間・15分・5分・1分・Tickを一括切り替えできます。Binance Japanで取引所方式が一時中止中のIMX・GRT・CHZは除外しています。
+    Binance市場のUSDTペアを監視し、日本で買える対象だけ表示します。上昇時は高値まで、下落時は安値までの距離を表示し、監視銘柄にはシンボルマークを表示します。異変検知はBinanceのUSDT市場を基準にしており、日本円での実際の購入価格・スプレッド・取引方式とは一致しない場合があります。購入前にはBinance Japan側のJPY条件を確認してください。チャート右上の騰落率は、選択中の時間足でミニチャートに表示されている範囲全体に連動します。異変判定は従来どおり2分基準です。異変は検知後15分間保持し、複数銘柄を最新順で表示します。同一銘柄は再検知時に更新されます。全銘柄チャートは週足・日足・4時間・1時間・15分・5分・1分・Tickを一括切り替えできます。Binance Japanで取引所方式が一時中止中のIMX・GRT・CHZは除外しています。
   </div>
 </div>
 
@@ -388,7 +387,7 @@ h1{margin:0;font-size:32px}
     await Promise.all([worker(),worker(),worker(),worker()]);
     $("chartStatus").textContent = failed
       ? `${TF_LABELS[tf]}表示中（一部は受信データから生成）`
-      : `${TF_LABELS[tf]}表示中・右上は現在足の騰落率`;
+      : `${TF_LABELS[tf]}表示中・右上は表示範囲の騰落率`;
     renderAllCharts();
   }
 
@@ -449,6 +448,8 @@ h1{margin:0;font-size:32px}
   }
 
   function timeframeChangePct(coin){
+    // Right-top percentage always represents the visible mini-chart range:
+    // first visible price/candle open -> latest visible/current price.
     if(selectedTf==="tick"){
       const s=state[coin];
       if(!s || !s.trades.length) return null;
@@ -464,10 +465,11 @@ h1{margin:0;font-size:32px}
       ? history[coin]
       : aggregateLocalTrades(coin,selectedTf,30);
 
-    if(!candles || !candles.length) return null;
-    const current=candles[candles.length-1];
-    if(!current || !current.open) return null;
-    return (current.close/current.open-1)*100;
+    if(!candles || candles.length<1) return null;
+    const first=candles[0];
+    const last=candles[candles.length-1];
+    if(!first || !last || !first.open) return null;
+    return (last.close/first.open-1)*100;
   }
 
   function renderAllCharts(){

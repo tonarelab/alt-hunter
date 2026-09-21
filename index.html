@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#07111f">
-<title>ALT HUNTER v1.6</title>
+<title>ALT HUNTER v1.7</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#07111f;color:#eef5ff}
@@ -42,6 +42,8 @@ h1{margin:0;font-size:32px}
 .tfBar{display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px;-webkit-overflow-scrolling:touch}
 .tfBtn{border:1px solid #26384f;background:#0c1828;color:#9fb2c9;border-radius:999px;padding:7px 11px;font-size:12px;white-space:nowrap}
 .tfBtn.active{background:#183653;border-color:#3976a7;color:#eaf5ff}
+.tfHelp{margin-top:8px;background:#0b1725;border:1px solid #1f3045;border-radius:12px;padding:10px 12px;color:#8ea2bd;font-size:11px;line-height:1.65}
+.tfHelp b{color:#dbe7f5;font-weight:650}
 
 @media(max-width:620px){.allGrid{grid-template-columns:1fr}}
 
@@ -53,7 +55,7 @@ h1{margin:0;font-size:32px}
   <div class="top">
     <div>
       <h1>ALT HUNTER</h1>
-      <div class="sub">Binance市場で監視 → 日本で買えるアルトだけ表示 v1.6</div>
+      <div class="sub">Binance市場で監視 → 日本で買えるアルトだけ表示 v1.7</div>
       <div id="diag" class="sub">起動中…</div>
     </div>
     <div id="status" class="status">接続中…</div>
@@ -100,6 +102,12 @@ h1{margin:0;font-size:32px}
     <button class="tfBtn" data-tf="tick">Tick</button>
   </div>
   <div id="chartStatus" class="sub">1分足を表示中</div>
+  <div class="tfHelp">
+    <b>％表示の基準</b><br>
+    週足：今週の始値 → 現在 ／ 日足：今日の始値 → 現在<br>
+    4時間：現在の4時間足 ／ 1時間：現在の1時間足<br>
+    15分・5分・1分：それぞれ現在足 ／ Tick：表示範囲の先頭 → 現在
+  </div>
   <div id="allCharts" class="allGrid"></div>
 
   <div class="footer">

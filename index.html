@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#07111f">
-<title>ALT HUNTER v1.7</title>
+<title>ALT HUNTER v1.9</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#07111f;color:#eef5ff}
@@ -22,6 +22,9 @@ h1{margin:0;font-size:32px}
 .metric b{font-size:15px}
 .grid{display:grid;gap:10px;margin-top:12px}
 .coin{font-size:20px;font-weight:800}
+.coinLine{display:flex;align-items:center;gap:8px}
+.coinIcon{width:24px;height:24px;border-radius:50%;object-fit:cover;background:#142238;flex:0 0 auto}
+.coinFallback{width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:#183653;color:#d9ecff;font-size:9px;font-weight:800;flex:0 0 auto}
 .price{font-size:22px;font-weight:700;margin-top:8px}
 .tag{font-size:12px;padding:5px 8px;border-radius:999px;background:#11303a;color:#8ce5ef}
 .tag.hot{background:#3a2413;color:#ffd08c}
@@ -55,7 +58,7 @@ h1{margin:0;font-size:32px}
   <div class="top">
     <div>
       <h1>ALT HUNTER</h1>
-      <div class="sub">Binance市場で監視 → 日本で買えるアルトだけ表示 v1.7</div>
+      <div class="sub">Binance市場で監視 → 日本で買えるアルトだけ表示 v1.9</div>
       <div id="diag" class="sub">起動中…</div>
     </div>
     <div id="status" class="status">接続中…</div>
@@ -73,15 +76,7 @@ h1{margin:0;font-size:32px}
     </div>
   </div>
 
-  <div class="panel">
-    <div class="row"><strong>通信診断</strong><span id="wsState" class="muted">未接続</span></div>
-    <div class="metrics">
-      <div class="metric"><span>購読ストリーム</span><b id="subCount">0</b></div>
-      <div class="metric"><span>受信件数</span><b id="msgCount">0</b></div>
-      <div class="metric"><span>最終受信</span><b id="lastMsg">—</b></div>
-    </div>
-  </div>
-
+  
   <div id="signals" class="grid"></div>
 
   <div class="panel">
@@ -89,7 +84,7 @@ h1{margin:0;font-size:32px}
     <div id="watch" class="grid"></div>
   </div>
 
-  <div class="sectionTitle">全銘柄ミニチャート</div>
+  <div class="sectionTitle">監視銘柄ミニチャート</div>
   <div class="sub">時間足を一括切り替え</div>
   <div id="tfBar" class="tfBar">
     <button class="tfBtn" data-tf="1w">週足</button>
@@ -112,7 +107,7 @@ h1{margin:0;font-size:32px}
 
   <div class="footer">
     この版は売買推奨ではなく、チャートを開く候補を探すレーダーです。<br>
-    Binance市場のUSDTペアを監視し、日本で買える対象だけ表示します。上昇時は高値まで、下落時は安値までの距離を表示し、チャート右上の騰落率は選択中の時間足に連動します。異変判定は従来どおり2分基準です。異変は検知後15分間保持し、複数銘柄を最新順で表示します。同一銘柄は再検知時に更新されます。全銘柄チャートは週足・日足・4時間・1時間・15分・5分・1分・Tickを一括切り替えできます。Binance Japanで取引所方式が一時中止中のIMX・GRT・CHZは除外しています。
+    Binance市場のUSDTペアを監視し、日本で買える対象だけ表示します。上昇時は高値まで、下落時は安値までの距離を表示し、監視銘柄にはシンボルマークを表示します。チャート右上の騰落率は選択中の時間足に連動します。異変判定は従来どおり2分基準です。異変は検知後15分間保持し、複数銘柄を最新順で表示します。同一銘柄は再検知時に更新されます。全銘柄チャートは週足・日足・4時間・1時間・15分・5分・1分・Tickを一括切り替えできます。Binance Japanで取引所方式が一時中止中のIMX・GRT・CHZは除外しています。
   </div>
 </div>
 
@@ -136,8 +131,7 @@ h1{margin:0;font-size:32px}
 
   const $ = id => document.getElementById(id);
   $("pairCount").textContent = COINS.length;
-  $("subCount").textContent = streams.length;
-
+  
   for(const coin of COINS) state[coin] = {trades:[], last:null, firstSeen:null};
   const ALERT_HOLD_MS = 15*60*1000;
   const alerts = {};
@@ -197,6 +191,16 @@ h1{margin:0;font-size:32px}
     return {coin,ready,hot,direction,last:s.last,ratio,change2,toHigh,toLow,rangePos};
   }
 
+  function coinIconHtml(coin){
+    const src=`https://assets.coincap.io/assets/icons/${coin.toLowerCase()}@2x.png`;
+    return `<span class="coinLine">
+      <img class="coinIcon" src="${src}" alt="${coin}"
+        onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'">
+      <span class="coinFallback" style="display:none">${coin.slice(0,4)}</span>
+      <span>${coin}</span>
+    </span>`;
+  }
+
   function card(d){
     const tag = d.direction==="up"
       ? "🔥 上昇異変"
@@ -210,7 +214,7 @@ h1{margin:0;font-size:32px}
 
     return `<div class="card${extraClass}">
       <div class="row">
-        <div class="coin">${d.coin}</div>
+        <div class="coin">${coinIconHtml(d.coin)}</div>
         <div class="tag ${d.direction==="up"?"hot":d.direction==="down"?"down":""}">${tag}</div>
       </div>
       <div class="price">${fmtPrice(d.last)}</div>
@@ -272,7 +276,7 @@ h1{margin:0;font-size:32px}
 
       return `<div class="card retained ${cls}">
         <div class="row">
-          <div class="coin">${a.coin}</div>
+          <div class="coin">${coinIconHtml(a.coin)}</div>
           <div class="tag ${cls}">${tag}</div>
         </div>
         <div class="price">${fmtPrice(d.last)}</div>
@@ -462,7 +466,7 @@ h1{margin:0;font-size:32px}
       <div class="compactCard">
         <div class="compactTop">
           <div>
-            <div class="coin" style="font-size:17px">${d.coin}</div>
+            <div class="coin" style="font-size:17px">${coinIconHtml(d.coin)}</div>
             <div class="compactPrice">${fmtPrice(d.last)}</div>
           </div>
           <div class="compactMove">${timeframeChangePct(d.coin)!=null ? pct(timeframeChangePct(d.coin)) : "準備中"}</div>
@@ -490,24 +494,19 @@ h1{margin:0;font-size:32px}
     btn.addEventListener("click",()=>loadHistory(btn.dataset.tf));
   });
 
-  let ws, received=0;
+  let ws;
   function connect(){
-    $("wsState").textContent="接続中";
-    $("diag").textContent="Binance WebSocketへ接続中…";
+        $("diag").textContent="市場データへ接続中…";
     ws=new WebSocket(url);
 
     ws.onopen=()=>{
       $("status").textContent="● LIVE";
       $("status").className="status live";
-      $("wsState").textContent="OPEN";
-      $("diag").textContent=`${COINS.length}銘柄を監視中`;
+            $("diag").textContent=`${COINS.length}銘柄を監視中`;
     };
 
     ws.onmessage=e=>{
-      received++;
-      $("msgCount").textContent=received.toLocaleString("ja-JP");
-      $("lastMsg").textContent=new Date().toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
-      try{
+                  try{
         const obj=JSON.parse(e.data);
         const d=obj.data||obj;
         if(d && d.e==="aggTrade"){
@@ -535,14 +534,12 @@ h1{margin:0;font-size:32px}
     ws.onclose=()=>{
       $("status").textContent="再接続中…";
       $("status").className="status";
-      $("wsState").textContent="CLOSED";
-      $("diag").textContent="接続が切れました。自動再接続します";
+            $("diag").textContent="再接続中…";
       setTimeout(connect,2500);
     };
 
     ws.onerror=()=>{
-      $("wsState").textContent="ERROR";
-      $("diag").textContent="Binance WebSocket接続エラー";
+            $("diag").textContent="接続エラー・再試行中";
     };
   }
 

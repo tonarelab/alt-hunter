@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#07111f">
-<title>ALT HUNTER v1.5</title>
+<title>ALT HUNTER v1.6</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#07111f;color:#eef5ff}
@@ -53,7 +53,7 @@ h1{margin:0;font-size:32px}
   <div class="top">
     <div>
       <h1>ALT HUNTER</h1>
-      <div class="sub">Binance市場で監視 → 日本で買えるアルトだけ表示 v1.5</div>
+      <div class="sub">Binance市場で監視 → 日本で買えるアルトだけ表示 v1.6</div>
       <div id="diag" class="sub">起動中…</div>
     </div>
     <div id="status" class="status">接続中…</div>
@@ -104,7 +104,7 @@ h1{margin:0;font-size:32px}
 
   <div class="footer">
     この版は売買推奨ではなく、チャートを開く候補を探すレーダーです。<br>
-    Binance市場のUSDTペアを監視し、日本で買える対象だけ表示します。上昇時は高値まで、下落時は安値までの距離を表示し、異変は検知後15分間保持し、複数銘柄を最新順で表示します。同一銘柄は再検知時に更新されます。全銘柄チャートは週足・日足・4時間・1時間・15分・5分・1分・Tickを一括切り替えできます。Binance Japanで取引所方式が一時中止中のIMX・GRT・CHZは除外しています。
+    Binance市場のUSDTペアを監視し、日本で買える対象だけ表示します。上昇時は高値まで、下落時は安値までの距離を表示し、チャート右上の騰落率は選択中の時間足に連動します。異変判定は従来どおり2分基準です。異変は検知後15分間保持し、複数銘柄を最新順で表示します。同一銘柄は再検知時に更新されます。全銘柄チャートは週足・日足・4時間・1時間・15分・5分・1分・Tickを一括切り替えできます。Binance Japanで取引所方式が一時中止中のIMX・GRT・CHZは除外しています。
   </div>
 </div>
 
@@ -343,7 +343,7 @@ h1{margin:0;font-size:32px}
 
     if(tf==="tick"){
       renderAllCharts();
-      $("chartStatus").textContent="Tickを表示中";
+      $("chartStatus").textContent="Tickを表示中・右上は表示範囲の騰落率";
       return;
     }
 
@@ -366,7 +366,7 @@ h1{margin:0;font-size:32px}
     await Promise.all([worker(),worker(),worker(),worker()]);
     $("chartStatus").textContent = failed
       ? `${TF_LABELS[tf]}表示中（一部は受信データから生成）`
-      : `${TF_LABELS[tf]}表示中`;
+      : `${TF_LABELS[tf]}表示中・右上は現在足の騰落率`;
     renderAllCharts();
   }
 
@@ -426,6 +426,28 @@ h1{margin:0;font-size:32px}
     });
   }
 
+  function timeframeChangePct(coin){
+    if(selectedTf==="tick"){
+      const s=state[coin];
+      if(!s || !s.trades.length) return null;
+      const now=Date.now();
+      const pts=s.trades.filter(x=>x.t>=now-30*60_000);
+      if(pts.length<2) return null;
+      const first=pts[0].price;
+      const last=pts[pts.length-1].price;
+      return first ? (last/first-1)*100 : null;
+    }
+
+    const candles=(history[coin] && history[coin].length)
+      ? history[coin]
+      : aggregateLocalTrades(coin,selectedTf,30);
+
+    if(!candles || !candles.length) return null;
+    const current=candles[candles.length-1];
+    if(!current || !current.open) return null;
+    return (current.close/current.open-1)*100;
+  }
+
   function renderAllCharts(){
     const rows=COINS.map(calc);
     $("allCharts").innerHTML=rows.map(d=>`
@@ -435,7 +457,7 @@ h1{margin:0;font-size:32px}
             <div class="coin" style="font-size:17px">${d.coin}</div>
             <div class="compactPrice">${fmtPrice(d.last)}</div>
           </div>
-          <div class="compactMove">${d.ready?pct(d.change2):"準備中"}</div>
+          <div class="compactMove">${timeframeChangePct(d.coin)!=null ? pct(timeframeChangePct(d.coin)) : "準備中"}</div>
         </div>
         <canvas class="miniChart" data-chart="${d.coin}"></canvas>
       </div>`).join("");

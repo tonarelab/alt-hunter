@@ -252,7 +252,7 @@ h1{margin:0;font-size:32px}
         ? "🔻 下落異変"
         : d.ready
           ? "👀 監視"
-          : "準備中";
+          : "データ取得中";
 
     const extraClass = d.direction==="up" ? " hot" : d.direction==="down" ? " down" : "";
 
@@ -516,7 +516,7 @@ h1{margin:0;font-size:32px}
             <div class="coin" style="font-size:17px">${coinIconHtml(d.coin)}</div>
             <div class="compactPrice">${fmtPrice(d.last)}</div>
           </div>
-          <div class="compactMove">${timeframeChangePct(d.coin)!=null ? pct(timeframeChangePct(d.coin)) : "準備中"}</div>
+          <div class="compactMove">${timeframeChangePct(d.coin)!=null ? pct(timeframeChangePct(d.coin)) : "データ取得中"}</div>
         </div>
         <canvas class="miniChart" data-chart="${d.coin}"></canvas>
       </div>`).join("");

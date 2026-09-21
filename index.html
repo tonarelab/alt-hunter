@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#07111f">
-<title>ALT HUNTER v1.9</title>
+<title>ALT HUNTER v1.10</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#07111f;color:#eef5ff}
@@ -47,6 +47,8 @@ h1{margin:0;font-size:32px}
 .tfBtn.active{background:#183653;border-color:#3976a7;color:#eaf5ff}
 .tfHelp{margin-top:8px;background:#0b1725;border:1px solid #1f3045;border-radius:12px;padding:10px 12px;color:#8ea2bd;font-size:11px;line-height:1.65}
 .tfHelp b{color:#dbe7f5;font-weight:650}
+.marketNote{margin-top:10px;background:#101b2b;border:1px solid #2a3e56;border-radius:14px;padding:12px 14px;color:#9fb2c9;font-size:12px;line-height:1.7}
+.marketNote strong{color:#e7f2ff}
 
 @media(max-width:620px){.allGrid{grid-template-columns:1fr}}
 
@@ -58,7 +60,7 @@ h1{margin:0;font-size:32px}
   <div class="top">
     <div>
       <h1>ALT HUNTER</h1>
-      <div class="sub">Binance市場で監視 → 日本で買えるアルトだけ表示 v1.9</div>
+      <div class="sub">Binance USDT市場で検知 → 日本で買えるアルトだけ表示 v1.10</div>
       <div id="diag" class="sub">起動中…</div>
     </div>
     <div id="status" class="status">接続中…</div>
@@ -77,6 +79,14 @@ h1{margin:0;font-size:32px}
   </div>
 
   
+  <div class="marketNote">
+    <strong>監視と購入は別市場です</strong><br>
+    ALT HUNTERは流動性の高い <strong>Binance USDT市場</strong> で異変を検知します。<br>
+    表示対象は日本から購入可能な監視銘柄に限定していますが、
+    実際に買う前には <strong>Binance Japan側のJPY価格・スプレッド・板の有無／販売所条件</strong> を必ず確認してください。<br>
+    USDT市場とJPY市場では、価格変動率や売買条件が完全には一致しない場合があります。
+  </div>
+
   <div id="signals" class="grid"></div>
 
   <div class="panel">
@@ -107,7 +117,7 @@ h1{margin:0;font-size:32px}
 
   <div class="footer">
     この版は売買推奨ではなく、チャートを開く候補を探すレーダーです。<br>
-    Binance市場のUSDTペアを監視し、日本で買える対象だけ表示します。上昇時は高値まで、下落時は安値までの距離を表示し、監視銘柄にはシンボルマークを表示します。チャート右上の騰落率は選択中の時間足に連動します。異変判定は従来どおり2分基準です。異変は検知後15分間保持し、複数銘柄を最新順で表示します。同一銘柄は再検知時に更新されます。全銘柄チャートは週足・日足・4時間・1時間・15分・5分・1分・Tickを一括切り替えできます。Binance Japanで取引所方式が一時中止中のIMX・GRT・CHZは除外しています。
+    Binance市場のUSDTペアを監視し、日本で買える対象だけ表示します。上昇時は高値まで、下落時は安値までの距離を表示し、監視銘柄にはシンボルマークを表示します。異変検知はBinanceのUSDT市場を基準にしており、日本円での実際の購入価格・スプレッド・取引方式とは一致しない場合があります。購入前にはBinance Japan側のJPY条件を確認してください。チャート右上の騰落率は選択中の時間足に連動します。異変判定は従来どおり2分基準です。異変は検知後15分間保持し、複数銘柄を最新順で表示します。同一銘柄は再検知時に更新されます。全銘柄チャートは週足・日足・4時間・1時間・15分・5分・1分・Tickを一括切り替えできます。Binance Japanで取引所方式が一時中止中のIMX・GRT・CHZは除外しています。
   </div>
 </div>
 

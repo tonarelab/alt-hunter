@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#07111f">
-<title>ALT HUNTER v1.11</title>
+<meta name="description" content="Binance USDT市場の値動きからアルトコインの異変を検知する個人開発の実験的マーケットレーダー。">
+<title>ALT HUNTER β | Altcoin Market Radar</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#07111f;color:#eef5ff}
@@ -49,6 +50,11 @@ h1{margin:0;font-size:32px}
 .tfHelp b{color:#dbe7f5;font-weight:650}
 .marketNote{margin-top:10px;background:#101b2b;border:1px solid #2a3e56;border-radius:14px;padding:12px 14px;color:#9fb2c9;font-size:12px;line-height:1.7}
 .marketNote strong{color:#e7f2ff}
+.betaBadge{display:inline-flex;align-items:center;margin-left:8px;padding:4px 7px;border-radius:999px;border:1px solid #2c6d5b;color:#78dbb5;font-size:10px;font-weight:800;vertical-align:middle;letter-spacing:.04em}
+.publicInfo{margin-top:14px;background:#0b1725;border:1px solid #1f3045;border-radius:14px;padding:13px 14px;color:#8ea2bd;font-size:11px;line-height:1.7}
+.publicInfo b{color:#dce8f6}
+.publicInfo .infoTitle{font-size:12px;color:#eef5ff;font-weight:800;margin-bottom:4px}
+.footerTitle{color:#9fb2c9;font-weight:750;margin-bottom:3px}
 
 @media(max-width:620px){.allGrid{grid-template-columns:1fr}}
 
@@ -59,8 +65,8 @@ h1{margin:0;font-size:32px}
 <div class="wrap">
   <div class="top">
     <div>
-      <h1>ALT HUNTER</h1>
-      <div class="sub">Binance USDT市場で検知 → 日本で買えるアルトだけ表示 v1.11</div>
+      <h1>ALT HUNTER <span class="betaBadge">PUBLIC BETA</span></h1>
+      <div class="sub">Binance USDT市場の異変を探す、個人開発の実験版レーダー</div>
       <div id="diag" class="sub">起動中…</div>
     </div>
     <div id="status" class="status">接続中…</div>
@@ -74,17 +80,17 @@ h1{margin:0;font-size:32px}
     <div class="metrics">
       <div class="metric"><span>異変条件</span><b>出来高 2.0倍</b></div>
       <div class="metric"><span>価格条件</span><b>2分 ±1.0%</b></div>
-      <div class="metric"><span>表示対象</span><b>Binance Japan取扱</b></div>
+      <div class="metric"><span>監視対象</span><b>国内取扱を参考に選定</b></div>
     </div>
   </div>
 
   
   <div class="marketNote">
-    <strong>監視と購入は別市場です</strong><br>
-    ALT HUNTERは流動性の高い <strong>Binance USDT市場</strong> で異変を検知します。<br>
-    表示対象は日本から購入可能な監視銘柄に限定していますが、
-    実際に買う前には <strong>Binance Japan側のJPY価格・スプレッド・板の有無／販売所条件</strong> を必ず確認してください。<br>
-    USDT市場とJPY市場では、価格変動率や売買条件が完全には一致しない場合があります。
+    <strong>監視データについて</strong><br>
+    ALT HUNTERは <strong>BinanceのUSDT市場データ</strong> から、出来高と短期価格変動の「異変」を探す情報ツールです。<br>
+    このページには <strong>購入・売却・口座連携機能はありません。</strong><br>
+    実際に取引する場合は、ご利用の暗号資産交換業者で日本円価格・スプレッド・板の有無・取引条件などをご確認ください。<br>
+    USDT市場と日本円市場では、値動きや売買条件が一致しない場合があります。
   </div>
 
   <div id="signals" class="grid"></div>
@@ -114,15 +120,25 @@ h1{margin:0;font-size:32px}
   </div>
   <div id="allCharts" class="allGrid"></div>
 
+  <div class="publicInfo">
+    <div class="infoTitle">公開β版について</div>
+    <b>個人開発の実験的な情報ツールです。</b> 投資助言、売買推奨、将来の価格予測を目的としたものではありません。<br>
+    市場データの遅延・欠落、通信障害、計算誤差、誤検知などが発生する可能性があります。表示内容の正確性・完全性・即時性を保証するものではありません。<br>
+    監視銘柄は国内での取扱状況を参考に選定していますが、取扱状況や取引条件は変更される場合があります。実際の取引可否は各暗号資産交換業者でご確認ください。<br>
+    現在の公開β版では、ユーザー登録・売買機能・有料機能・広告・アクセス解析は使用していません。
+  </div>
+
   <div class="footer">
-    この版は売買推奨ではなく、チャートを開く候補を探すレーダーです。<br>
-    Binance市場のUSDTペアを監視し、日本で買える対象だけ表示します。上昇時は高値まで、下落時は安値までの距離を表示し、監視銘柄にはシンボルマークを表示します。異変検知はBinanceのUSDT市場を基準にしており、日本円での実際の購入価格・スプレッド・取引方式とは一致しない場合があります。購入前にはBinance Japan側のJPY条件を確認してください。チャート右上の騰落率は、選択中の時間足でミニチャートに表示されている範囲全体に連動します。異変判定は従来どおり2分基準です。異変は検知後15分間保持し、複数銘柄を最新順で表示します。同一銘柄は再検知時に更新されます。全銘柄チャートは週足・日足・4時間・1時間・15分・5分・1分・Tickを一括切り替えできます。Binance Japanで取引所方式が一時中止中のIMX・GRT・CHZは除外しています。
+    <div class="footerTitle">ALT HUNTER β</div>
+    データ参照：Binance USDT市場 ／ 異変条件：出来高2.0倍＋2分価格変動±1.0%<br>
+    検知結果は「チャートを確認するきっかけ」のためのもので、売買判断そのものではありません。<br>
+    © TONARE LAB / Experimental personal project
   </div>
 </div>
 
 <script>
 (() => {
-  // Binance Japan取扱銘柄のうち、USDTペア監視に向く主要アルトをまず対象化。
+  // 国内での取扱状況を参考に選定した主要アルトを、Binance USDT市場で監視。
   // v0.7では「確実に動くこと」を優先し、対象は少なめから開始。
   const COINS = [
     "ETH","XRP","BNB","SOL","ADA","AVAX","DOT","LINK","DOGE","SHIB",
